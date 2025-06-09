@@ -78,6 +78,7 @@ let isBotSpeaking = false; // Flag to track if the bot is currently speaking
 let currentUtterance = null; // To keep track of the current speech so it can be stopped
 const botAvatar = document.getElementById('bot-avatar');
 let speakingAnimationInterval; // To control the speaking animation
+let originalOnResult = null; // To store the original onresult function
 
 function startSpeakingAnimation() {
     let isOpen = true;
@@ -99,23 +100,36 @@ function stopSpeakingAnimation() {
 function speak(text) {
     if ('speechSynthesis' in window) {
         currentUtterance = new SpeechSynthesisUtterance(text);
-        currentUtterance.rate = 1.0; // Normal speech rate
-        currentUtterance.pitch = 1.0; // Normal pitch
-        currentUtterance.lang = 'en-US'; // Language
+        currentUtterance.rate = 1.0;
+        currentUtterance.pitch = 1.0;
+        currentUtterance.lang = 'en-US';
 
         currentUtterance.onstart = () => {
             isBotSpeaking = true;
             console.log('Bot started speaking.');
-            statusDiv.textContent = 'Bot Speaking...'; // Update status when bot starts speaking
-            startSpeakingAnimation(); // Start the animation
+            statusDiv.textContent = 'Bot Speaking...';
+            startSpeakingAnimation();
+            recognition.abort();
+            clearTimeout(recognitionTimeout);
+
+            // Store original onresult and temporarily disable it
+            originalOnResult = recognition.onresult;
+            recognition.onresult = null; // Disable the listener
+            document.getElementById('user-input').value = ''; // Ensure input is clear visually
+            finalTranscript = ''; // Clear any accumulated user input
         };
 
         currentUtterance.onend = () => {
             console.log('Speech finished');
             currentUtterance = null;
             isBotSpeaking = false;
-            stopSpeakingAnimation(); // Stop the animation
-            // Automatically start listening after bot finishes speaking with minimal delay
+            stopSpeakingAnimation();
+
+            // Re-enable original onresult
+            if (originalOnResult) {
+                recognition.onresult = originalOnResult;
+                originalOnResult = null;
+            }
             setTimeout(startListening, 50);
         };
 
@@ -123,8 +137,13 @@ function speak(text) {
             console.error('SpeechSynthesisUtterance.onerror', event);
             currentUtterance = null;
             isBotSpeaking = false;
-            stopSpeakingAnimation(); // Stop the animation on error
-            // Attempt to restart listening even on error with minimal delay
+            stopSpeakingAnimation();
+
+            // Re-enable original onresult on error as well
+            if (originalOnResult) {
+                recognition.onresult = originalOnResult;
+                originalOnResult = null;
+            }
             setTimeout(startListening, 50);
         };
 
@@ -291,6 +310,35 @@ if ('webkitSpeechRecognition' in window) {
 
     let finalTranscript = ''; // To accumulate final results
 
+    // Define the actual onresult handler here
+    const actualOnResultHandler = (event) => {
+        // Reset the silence timer on any speech detection (interim or final)
+        clearTimeout(recognitionTimeout);
+        recognitionTimeout = setTimeout(() => {
+            if (finalTranscript.trim().length > 0) {
+                console.log("Sending message due to silence timeout:", finalTranscript.trim());
+                sendMessageToBot(finalTranscript.trim());
+                finalTranscript = ''; // Reset after sending
+            }
+            // After sending, ensure listening continues if it was stopped implicitly
+            if (recognition.readyState !== 'listening') {
+                startListening();
+            }
+        }, SILENCE_TIMEOUT);
+
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript + ' ';
+            } else {
+                interimTranscript += event.results[i][0].transcript;
+            }
+        }
+
+        document.getElementById('user-input').value = finalTranscript + interimTranscript; // Show both
+        statusDiv.textContent = 'Recognizing...' + interimTranscript; // Show interim status
+    };
+
     recognition.onstart = () => {
         voiceInputButton.disabled = true; // Disable start button while listening
         clearTimeout(recognitionTimeout);
@@ -307,73 +355,47 @@ if ('webkitSpeechRecognition' in window) {
         }, SILENCE_TIMEOUT);
     };
 
-    recognition.onresult = (event) => {
-        // Reset the silence timer on any speech detection (interim or final)
-        clearTimeout(recognitionTimeout);
-        recognitionTimeout = setTimeout(() => {
-            if (finalTranscript.trim().length > 0) {
-                console.log("Sending message due to silence timeout:", finalTranscript.trim());
-                sendMessageToBot(finalTranscript.trim());
-                finalTranscript = ''; // Reset after sending
-            }
-            // After sending, ensure listening continues if it was stopped implicitly
-            if (!isBotSpeaking && recognition.readyState !== 'listening') { // Only restart if not already listening
-                startListening();
-            }
-        }, SILENCE_TIMEOUT);
-
-        let interimTranscript = '';
-        if (!isBotSpeaking) { // Only process if bot is not speaking
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript + ' '; // Add space for readability
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
-                }
-            }
-            document.getElementById('user-input').value = finalTranscript + interimTranscript; // Show both
-            statusDiv.textContent = 'Recognizing...' + interimTranscript; // Show interim status
-        } else {
-            // If bot is speaking, do not process user input or update the input field
-            finalTranscript = ''; // Ensure no accumulation during bot speech
-            // interimTranscript will remain empty as it's reset at the start of onresult
-            statusDiv.textContent = 'Bot Speaking...'; // Keep status as bot speaking
-        }
-    };
+    // Assign the actual handler to recognition.onresult initially
+    recognition.onresult = actualOnResultHandler;
 
     recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         voiceInputButton.disabled = false;
-        clearTimeout(recognitionTimeout); // Clear timeout on error
+        clearTimeout(recognitionTimeout);
         recognitionTimeout = null;
 
-        // If an error occurs, especially 'no-speech', attempt to restart listening
-        // unless the bot is currently speaking.
         if (!isBotSpeaking) {
-            // Only update status for critical errors, not just 'no-speech'
             if (event.error !== 'no-speech') {
                 statusDiv.textContent = 'Error: ' + event.error + '. Restarting...';
             } else {
-                statusDiv.textContent = 'No speech detected, listening again...'; // Specific message for no-speech
+                statusDiv.textContent = 'No speech detected, listening again...';
             }
-            setTimeout(startListening, (event.error === 'no-speech') ? 50 : 1000); // Shorter delay for no-speech
+            setTimeout(startListening, (event.error === 'no-speech') ? 50 : 1000);
         } else {
             statusDiv.textContent = 'Error: ' + event.error; // Display error but don't restart if bot is speaking
+        }
+
+        // Ensure the onresult handler is restored if it was temporarily disabled
+        if (originalOnResult && recognition.onresult !== originalOnResult) {
+            recognition.onresult = originalOnResult;
+            originalOnResult = null;
         }
     };
 
     recognition.onend = () => {
-        // This 'onend' now primarily fires if the browser's internal logic terminates the session.
-        // We will attempt to restart it immediately for a continuous experience.
         console.log("Recognition session ended by browser. Attempting to restart...");
-        voiceInputButton.disabled = false; // Re-enable start button, though it might be re-disabled immediately
-        clearTimeout(recognitionTimeout); // Ensure timeout is cleared on natural end
+        voiceInputButton.disabled = false;
+        clearTimeout(recognitionTimeout);
         recognitionTimeout = null;
 
-        // Always attempt to restart recognition if the bot is not speaking
-        // The startListening function will handle if it's already listening or not.
+        // Ensure the onresult handler is restored if it was temporarily disabled
+        if (originalOnResult && recognition.onresult !== originalOnResult) {
+            recognition.onresult = originalOnResult;
+            originalOnResult = null;
+        }
+
         if (!isBotSpeaking) {
-            setTimeout(startListening, 50); // Very short delay for quick restart
+            setTimeout(startListening, 50);
         }
         document.getElementById('user-input').value = '';
     };
