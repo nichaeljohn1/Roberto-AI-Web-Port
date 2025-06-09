@@ -203,21 +203,10 @@ document.getElementById('user-input').addEventListener('keypress', (e) => {
     }
 });
 
-// Initial greeting from the bot (optional, but good for UX)
-window.onload = () => {
-    // You might want to send an initial "Introduce yourself" message to the bot
-    // to get its intro, similar to the Python script.
-    // For now, let's just display a welcome message.
-    const chatContainer = document.getElementById('messages');
-    const welcomeMessageDiv = document.createElement('div');
-    welcomeMessageDiv.classList.add('message', 'bot-message');
-    welcomeMessageDiv.textContent = "Hello! I am Roberto Web Bot. How can I help you today?";
-    chatContainer.appendChild(welcomeMessageDiv);
-};
-
 // --- Voice Input Implementation ---
 const voiceInputButton = document.getElementById('voice-input-button');
 const statusDiv = document.getElementById('status');
+const startChatButton = document.getElementById('start-chat-button');
 
 let recognition; // Declare outside to be accessible globally
 let recognitionTimeout; // Timer for silence detection
@@ -247,6 +236,7 @@ function startListening() {
     }
 }
 
+// Check for browser support and initialize recognition
 if ('webkitSpeechRecognition' in window) {
     recognition = new webkitSpeechRecognition();
     recognition.continuous = true;
@@ -351,20 +341,27 @@ if ('webkitSpeechRecognition' in window) {
         startListening();
     });
 
-    window.onload = () => {
+    // Handle the initial chat start with a button click for mobile compatibility
+    startChatButton.addEventListener('click', () => {
+        startChatButton.disabled = true;
+        // Initial bot greeting
         const chatContainer = document.getElementById('messages');
         const welcomeMessageDiv = document.createElement('div');
         welcomeMessageDiv.classList.add('message', 'bot-message');
         welcomeMessageDiv.textContent = "Hello! I am Roberto Web Bot. How can I help you today?";
         chatContainer.appendChild(welcomeMessageDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
-        
+
+        // Start listening after a short delay for UX, allowing initial bot message to be processed.
+        // The `speak().onend` will also trigger startListening.
         setTimeout(() => {
             startListening();
         }, 1000); 
-    };
+    });
+
 } else {
     voiceInputButton.disabled = true;
+    startChatButton.disabled = true;
     statusDiv.textContent = 'Web Speech API is not supported in this browser.';
     console.warn('Web Speech API not supported');
 }
