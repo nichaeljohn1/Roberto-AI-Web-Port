@@ -134,6 +134,17 @@ function speak(text) {
     }
 }
 
+function censorText(text) {
+    // Create a regex for each word to ensure whole word matching and case insensitivity
+    const censoredWords = ["Agregado", "Jorquia", "salud"];
+    let censoredText = text;
+    censoredWords.forEach(word => {
+        const regex = new RegExp(`\\b${word}\\b`, 'gi'); // \\b for whole word, gi for global and case-insensitive
+        censoredText = censoredText.replace(regex, '[redacted]'); // Replace with asterisks
+    });
+    return censoredText;
+}
+
 async function sendMessageToBot(text) {
     const chatContainer = document.getElementById('messages');
     const userInput = document.getElementById('user-input');
@@ -177,7 +188,10 @@ async function sendMessageToBot(text) {
         }
 
         const responseData = await response.json();
-        const botResponseContent = responseData.choices[0].message.content;
+        let botResponseContent = responseData.choices[0].message.content;
+
+        // Censor specific words
+        botResponseContent = censorText(botResponseContent);
 
         // Display bot message
         const botMessageDiv = document.createElement('div');
@@ -317,18 +331,14 @@ if ('webkitSpeechRecognition' in window) {
                     interimTranscript += event.results[i][0].transcript;
                 }
             }
+            document.getElementById('user-input').value = finalTranscript + interimTranscript; // Show both
+            statusDiv.textContent = 'Recognizing...' + interimTranscript; // Show interim status
         } else {
-            // If bot is speaking, discard user input but keep showing interim for live mic feel
+            // If bot is speaking, do not process user input or update the input field
             finalTranscript = ''; // Ensure no accumulation during bot speech
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (!event.results[i].isFinal) { // Only show interim if bot is speaking
-                    interimTranscript += event.results[i][0].transcript;
-                }
-            }
+            // interimTranscript will remain empty as it's reset at the start of onresult
+            statusDiv.textContent = 'Bot Speaking...'; // Keep status as bot speaking
         }
-
-        document.getElementById('user-input').value = finalTranscript + interimTranscript; // Show both
-        statusDiv.textContent = 'Recognizing...' + interimTranscript; // Show interim status
     };
 
     recognition.onerror = (event) => {
