@@ -68,7 +68,6 @@ let primoMessages = [{ "role": "user", "content": decrypt(primoEncryptedMessage)
 
 // IMPORTANT: For client-side applications, directly embedding API_KEYs is a security risk!
 // In a real application, you would typically proxy these requests through a backend server.
-const API_KEY = "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";
 const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 let primoMode = false; // Track if primo mode is enabled
@@ -167,6 +166,13 @@ function censorText(text) {
 async function sendMessageToBot(text) {
     const chatContainer = document.getElementById('messages');
     const userInput = document.getElementById('user-input');
+    const apiKeyInput = document.getElementById('api-key-input');
+    const API_KEY = apiKeyInput.value.trim(); // Get API key from input field
+
+    if (!API_KEY) {
+        alert('Please enter your Groq API Key!');
+        return;
+    }
 
     // Display user message
     const userMessageDiv = document.createElement('div');
