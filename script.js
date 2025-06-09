@@ -76,6 +76,25 @@ let isBotSpeaking = false; // Flag to track if the bot is currently speaking
 
 // Function for text-to-speech
 let currentUtterance = null; // To keep track of the current speech so it can be stopped
+const botAvatar = document.getElementById('bot-avatar');
+let speakingAnimationInterval; // To control the speaking animation
+
+function startSpeakingAnimation() {
+    let isOpen = true;
+    speakingAnimationInterval = setInterval(() => {
+        if (isOpen) {
+            botAvatar.src = 'closed.jpg';
+        } else {
+            botAvatar.src = 'open.jpg';
+        }
+        isOpen = !isOpen;
+    }, 150); // Alternate every 150ms
+}
+
+function stopSpeakingAnimation() {
+    clearInterval(speakingAnimationInterval);
+    botAvatar.src = 'closed.jpg'; // Ensure it ends on closed mouth
+}
 
 function speak(text) {
     if ('speechSynthesis' in window) {
@@ -88,12 +107,14 @@ function speak(text) {
             isBotSpeaking = true;
             console.log('Bot started speaking.');
             statusDiv.textContent = 'Bot Speaking...'; // Update status when bot starts speaking
+            startSpeakingAnimation(); // Start the animation
         };
 
         currentUtterance.onend = () => {
             console.log('Speech finished');
             currentUtterance = null;
             isBotSpeaking = false;
+            stopSpeakingAnimation(); // Stop the animation
             // Automatically start listening after bot finishes speaking with minimal delay
             setTimeout(startListening, 50);
         };
@@ -102,6 +123,7 @@ function speak(text) {
             console.error('SpeechSynthesisUtterance.onerror', event);
             currentUtterance = null;
             isBotSpeaking = false;
+            stopSpeakingAnimation(); // Stop the animation on error
             // Attempt to restart listening even on error with minimal delay
             setTimeout(startListening, 50);
         };
@@ -203,10 +225,21 @@ document.getElementById('user-input').addEventListener('keypress', (e) => {
     }
 });
 
+// Initial greeting from the bot (optional, but good for UX)
+window.onload = () => {
+    // You might want to send an initial "Introduce yourself" message to the bot
+    // to get its intro, similar to the Python script.
+    // For now, let's just display a welcome message.
+    const chatContainer = document.getElementById('messages');
+    const welcomeMessageDiv = document.createElement('div');
+    welcomeMessageDiv.classList.add('message', 'bot-message');
+    welcomeMessageDiv.textContent = "Hello! I am Roberto Web Bot. How can I help you today?";
+    chatContainer.appendChild(welcomeMessageDiv);
+};
+
 // --- Voice Input Implementation ---
 const voiceInputButton = document.getElementById('voice-input-button');
 const statusDiv = document.getElementById('status');
-const startChatButton = document.getElementById('start-chat-button');
 
 let recognition; // Declare outside to be accessible globally
 let recognitionTimeout; // Timer for silence detection
@@ -236,7 +269,6 @@ function startListening() {
     }
 }
 
-// Check for browser support and initialize recognition
 if ('webkitSpeechRecognition' in window) {
     recognition = new webkitSpeechRecognition();
     recognition.continuous = true;
@@ -341,27 +373,20 @@ if ('webkitSpeechRecognition' in window) {
         startListening();
     });
 
-    // Handle the initial chat start with a button click for mobile compatibility
-    startChatButton.addEventListener('click', () => {
-        startChatButton.disabled = true;
-        // Initial bot greeting
+    window.onload = () => {
         const chatContainer = document.getElementById('messages');
         const welcomeMessageDiv = document.createElement('div');
         welcomeMessageDiv.classList.add('message', 'bot-message');
         welcomeMessageDiv.textContent = "Hello! I am Roberto Web Bot. How can I help you today?";
         chatContainer.appendChild(welcomeMessageDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
-
-        // Start listening after a short delay for UX, allowing initial bot message to be processed.
-        // The `speak().onend` will also trigger startListening.
+        
         setTimeout(() => {
             startListening();
         }, 1000); 
-    });
-
+    };
 } else {
     voiceInputButton.disabled = true;
-    startChatButton.disabled = true;
     statusDiv.textContent = 'Web Speech API is not supported in this browser.';
     console.warn('Web Speech API not supported');
 }
