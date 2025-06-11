@@ -154,7 +154,7 @@ function speak(text) {
 
 function censorText(text) {
     // Create a regex for each word to ensure whole word matching and case insensitivity
-    const censoredWords = ["Agregado", "Jorquia", "salud"];
+    const censoredWords = ["Agregado", "Jorquia", "salud", "marcial"];
     let censoredText = text;
     censoredWords.forEach(word => {
         const regex = new RegExp(`\\b${word}\\b`, 'gi'); // \\b for whole word, gi for global and case-insensitive
